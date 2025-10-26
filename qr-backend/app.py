@@ -6,6 +6,9 @@ import os
 import sqlite3
 import json
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # -------------------
 # Flask 서버 설정
