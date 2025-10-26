@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 pyzbar==0.1.9
 Pillow==10.4.0
 Werkzeug==3.0.4
+gunicorn
