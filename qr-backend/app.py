@@ -61,14 +61,10 @@ def init_db():
                 label TEXT,
                 count INTEGER DEFAULT 1,
                 analysis_json TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reported_count INTEGER DEFAULT 0
             )
         ''')
-        c.execute(f"PRAGMA table_info({table})")
-        columns = [col[1] for col in c.fetchall()]
-        if "reported_count" not in columns:
-            c.execute(f"ALTER TABLE {table} ADD COLUMN reported_count INTEGER DEFAULT 0")
-
     conn.commit()
     conn.close()
     print("✅ DB 초기화 완료", flush=True)
@@ -131,6 +127,47 @@ def save_report(analysis_result):
                 json.dumps(analysis_result, ensure_ascii=False)
             ))
 
+        # ✅ label에 따라 suspected / warning 테이블 분기 저장
+        if label == "의심":
+            print("🟡 [DB] suspected 테이블에 저장", flush=True)
+            c.execute('''
+                INSERT OR IGNORE INTO suspected (
+                    original_url, final_url, domain, ssl_valid,
+                    whois_creation_date, virustotal_score,
+                    phishtank_result, label, analysis_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                url,
+                analysis_result.get("final_url"),
+                analysis_result.get("domain"),
+                analysis_result.get("ssl_valid"),
+                analysis_result.get("whois_creation_date"),
+                analysis_result.get("virustotal_score"),
+                analysis_result.get("phishtank_result"),
+                label,
+                json.dumps(analysis_result, ensure_ascii=False)
+            ))
+
+        elif label == "위험":
+            print("🔴 [DB] warning 테이블에 바로 저장", flush=True)
+            c.execute('''
+                INSERT OR IGNORE INTO warning (
+                    original_url, final_url, domain, ssl_valid,
+                    whois_creation_date, virustotal_score,
+                    phishtank_result, label, analysis_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                url,
+                analysis_result.get("final_url"),
+                analysis_result.get("domain"),
+                analysis_result.get("ssl_valid"),
+                analysis_result.get("whois_creation_date"),
+                analysis_result.get("virustotal_score"),
+                analysis_result.get("phishtank_result"),
+                label,
+                json.dumps(analysis_result, ensure_ascii=False)
+            ))
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -138,7 +175,7 @@ def save_report(analysis_result):
         traceback.print_exc()
 
 # -------------------
-# 신고 API
+# 신고 API (3회 이상 신고 시 suspected → warning)
 # -------------------
 @app.route('/report_qr', methods=['POST'])
 def report_qr():
@@ -160,6 +197,7 @@ def report_qr():
         reported_count += 1
 
         if reported_count >= 3:
+            print("🚨 신고 누적 3회 이상 → warning으로 이동", flush=True)
             c.execute("INSERT OR REPLACE INTO warning SELECT * FROM suspected WHERE id=?", (suspected_id,))
             c.execute("DELETE FROM suspected WHERE id=?", (suspected_id,))
         else:
@@ -230,7 +268,7 @@ def decode_qr_route():
         return jsonify({"error": str(e)}), 500
 
 # -------------------
-# WARNING 테이블 조회
+# WARNING 테이블 조회 (대시보드)
 # -------------------
 @app.route('/get_warning', methods=['GET'])
 def get_warning():
@@ -264,10 +302,8 @@ def get_warning():
 if __name__ == '__main__':
     print("🚀 Flask starting ...", flush=True)
     try:
-        port = int(os.environ.get("PORT", 8080))  # ✅ Railway가 PORT 환경변수로 주는 값 사용
+        port = int(os.environ.get("PORT", 8080))  # ✅ Railway PORT 환경변수
         app.run(host="0.0.0.0", port=port)
     except Exception as e:
-        import traceback
         print("❌ Flask crashed:", e, flush=True)
         traceback.print_exc()
-
