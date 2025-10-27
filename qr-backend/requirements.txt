@@ -7,3 +7,4 @@ pyzbar==0.1.9
 Pillow==10.4.0
 Werkzeug==3.0.4
 gunicorn
+opencv-python
