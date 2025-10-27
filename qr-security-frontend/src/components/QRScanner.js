@@ -21,7 +21,7 @@ function QRScanner({ onResult }) {
 
     try {
       const response = await axios.post(
-        "https://qr-backend-production.up.railway.app/decode_qr",
+        "https://qr-backend-production-c511.up.railway.app/decode_qr",
         { url: scannedUrl },
         { headers: { "Content-Type": "application/json" } }
       );

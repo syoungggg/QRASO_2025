@@ -8,7 +8,7 @@ export const analyzeQR = async (file) => {
   formData.append("file", file);
 
   try {
-    const response = await axios.post("https://qr-backend-production.up.railway.app/decode_qr", formData, formData, {
+    const response = await axios.post("https://qr-backend-production-c511.up.railway.app/decode_qr", formData, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },

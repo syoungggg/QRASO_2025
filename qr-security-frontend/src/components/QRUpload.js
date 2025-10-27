@@ -50,7 +50,7 @@ function QRUpload({ onResult }) {
 
     try {
       const response = await axios.post(
-        "http://localhost:5000/decode_qr",
+        "https://qr-backend-production-c511.up.railway.app/decode_qr",
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
