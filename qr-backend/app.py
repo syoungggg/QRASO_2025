@@ -27,24 +27,17 @@ except Exception as e:
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 print("✅ Flask 인스턴스 생성 및 CORS 적용 완료", flush=True)
-@app.after_request
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-    return response
-
-
-
-try:
-    CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
-except Exception as e:
-    print("❌ CORS 설정 중 오류:", e, flush=True)
-    traceback.print_exc()
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# -------------------
+# 기본 홈 경로 (헬스체크용)
+# -------------------
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({"status": "ok", "message": "QR Backend is running!"}), 200
 
 # -------------------
 # MySQL 연결 설정
@@ -79,7 +72,7 @@ def init_db():
             c.execute(f'''
                 CREATE TABLE IF NOT EXISTS {table} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    original_url VARCHAR(512) NOT NULL UNIQUE,  -- ✅ 길이 줄임
+                    original_url VARCHAR(512) NOT NULL UNIQUE,
                     final_url VARCHAR(512),
                     domain VARCHAR(255),
                     ssl_valid BOOLEAN,
@@ -152,7 +145,6 @@ def save_report(analysis_result):
                 json.dumps(analysis_result, ensure_ascii=False)
             ))
 
-        # suspected / warning 분기 저장
         if label == "의심":
             print("🟡 [DB] suspected 테이블에 저장", flush=True)
             c.execute('''
@@ -201,7 +193,7 @@ def save_report(analysis_result):
         traceback.print_exc()
 
 # -------------------
-# 신고 API (3회 이상 → warning 이동)
+# 신고 API
 # -------------------
 @app.route('/report_qr', methods=['POST'])
 def report_qr():
@@ -305,7 +297,7 @@ def get_warning():
         return jsonify({"error": str(e)}), 500
 
 # -------------------
-# 서버 실행
+# CORS 헤더 보강
 # -------------------
 @app.after_request
 def after_request(response):
@@ -314,11 +306,10 @@ def after_request(response):
     response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
     return response
 
+# -------------------
+# 서버 실행
+# -------------------
 if __name__ == '__main__':
     print("🚀 Flask starting (MySQL) ...", flush=True)
-    try:
-        port = int(os.environ.get("PORT", 8080))
-        app.run(host="0.0.0.0", port=port)
-    except Exception as e:
-        print("❌ Flask crashed:", e, flush=True)
-        traceback.print_exc()
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
