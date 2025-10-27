@@ -283,4 +283,10 @@ def get_warning():
 # 서버 실행
 # -------------------
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8080)
+    print("✅ Flask starting on 0.0.0.0:8080 ...")
+    try:
+        app.run(host="0.0.0.0", port=8080)
+    except Exception as e:
+        import traceback
+        print("❌ Flask crashed:", e)
+        traceback.print_exc()
