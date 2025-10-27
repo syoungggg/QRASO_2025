@@ -259,10 +259,12 @@ def get_warning():
 # 서버 실행
 # -------------------
 if __name__ == '__main__':
-    print("🚀 Flask starting on 0.0.0.0:8080 ...", flush=True)
+    print("🚀 Flask starting ...", flush=True)
     try:
-        app.run(host="0.0.0.0", port=8080)
+        port = int(os.environ.get("PORT", 8080))  # ✅ Railway가 PORT 환경변수로 주는 값 사용
+        app.run(host="0.0.0.0", port=port)
     except Exception as e:
+        import traceback
         print("❌ Flask crashed:", e, flush=True)
         traceback.print_exc()
-        sys.exit(1)
+
