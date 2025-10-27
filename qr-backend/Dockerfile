@@ -15,5 +15,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Flask 앱 실행 (gunicorn)
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "qr-backend.app:app"]
+CMD ["gunicorn", "--chdir", "/app/qr-backend", "--bind", "0.0.0.0:8080", "app:app"]
 
