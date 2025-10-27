@@ -27,6 +27,15 @@ except Exception as e:
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 print("✅ Flask 인스턴스 생성 및 CORS 적용 완료", flush=True)
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response
+
+
+
 try:
     CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 except Exception as e:
