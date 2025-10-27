@@ -70,9 +70,9 @@ def init_db():
             c.execute(f'''
                 CREATE TABLE IF NOT EXISTS {table} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    original_url VARCHAR(2048) NOT NULL UNIQUE,
-                    final_url VARCHAR(2048),
-                    domain VARCHAR(512),
+                    original_url VARCHAR(512) NOT NULL UNIQUE,  -- ✅ 길이 줄임
+                    final_url VARCHAR(512),
+                    domain VARCHAR(255),
                     ssl_valid BOOLEAN,
                     whois_creation_date VARCHAR(128),
                     virustotal_score VARCHAR(128),
@@ -82,7 +82,7 @@ def init_db():
                     analysis_json TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     reported_count INT DEFAULT 0
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             ''')
         conn.commit()
         conn.close()
