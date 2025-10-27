@@ -5,7 +5,7 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y libzbar0
 
 # 앱 디렉토리 설정
-WORKDIR /app
+WORKDIR /app/qr-backend
 
 # 종속성 복사 및 설치
 COPY requirements.txt .
