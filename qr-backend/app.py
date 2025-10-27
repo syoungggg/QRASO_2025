@@ -34,16 +34,25 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-DB_PATH = os.path.join("/data", "reports.db")
+
+# ✅ 절대경로로 DB 지정 (/data 볼륨)
+DB_PATH = "/data/reports.db"
 
 # -------------------
 # DB 초기화 (컬럼 자동 추가)
 # -------------------
 def init_db():
     print("🔧 DB 초기화 시작", flush=True)
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)  # ✅ /data 폴더 없으면 생성
-    print("📁 DB 디렉터리 생성 확인:", os.path.exists(os.path.dirname(DB_PATH)), flush=True)
-    
+
+    # ✅ /data 폴더 강제 생성 및 권한 부여
+    os.makedirs("/data", exist_ok=True)
+    os.chmod("/data", 0o777)
+
+    # ✅ 상태 로그 출력
+    print("📂 실제 DB 경로:", DB_PATH, flush=True)
+    print("📁 /data 존재 여부:", os.path.exists("/data"), flush=True)
+    print("📂 /data 쓰기 가능?:", os.access("/data", os.W_OK), flush=True)
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     tables = ['reports', 'suspected', 'warning']
