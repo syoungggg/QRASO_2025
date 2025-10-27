@@ -25,8 +25,8 @@ except Exception as e:
 # Flask 서버 설정
 # -------------------
 app = Flask(__name__)
-print("✅ Flask 인스턴스 생성됨", flush=True)
-
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+print("✅ Flask 인스턴스 생성 및 CORS 적용 완료", flush=True)
 try:
     CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 except Exception as e:
