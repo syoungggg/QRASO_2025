@@ -41,6 +41,9 @@ DB_PATH = os.path.join("/data", "reports.db")
 # -------------------
 def init_db():
     print("🔧 DB 초기화 시작", flush=True)
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)  # ✅ /data 폴더 없으면 생성
+    print("📁 DB 디렉터리 생성 확인:", os.path.exists(os.path.dirname(DB_PATH)), flush=True)
+    
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     tables = ['reports', 'suspected', 'warning']
