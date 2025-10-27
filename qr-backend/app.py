@@ -21,7 +21,7 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-DB_PATH = 'reports.db'
+DB_PATH = os.path.join("/tmp", "reports.db")
 
 # -------------------
 # DB 초기화 (컬럼 자동 추가)
