@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { QrReader } from "react-qr-reader";
-import axios from "axios";
+import api from "../api/api"; // ✅ axios 기본설정 가져오기
 
 function QRScanner({ onResult }) {
   const [data, setData] = useState(null);
@@ -20,12 +20,7 @@ function QRScanner({ onResult }) {
     setData(scannedUrl);
 
     try {
-      const response = await axios.post(
-        "https://qr-backend-production-c511.up.railway.app/decode_qr",
-        { url: scannedUrl },
-        { headers: { "Content-Type": "application/json" } }
-      );
-
+      const response = await api.post("/decode_qr", { url: scannedUrl }); // ✅ api.js 사용
       console.log("서버 응답:", response.data);
 
       if (onResult && typeof onResult === "function") {

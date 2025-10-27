@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api/api"; // ✅ 공통 axios 인스턴스 불러오기
 
 function QRUpload({ onResult }) {
   const [file, setFile] = useState(null);
@@ -49,21 +49,19 @@ function QRUpload({ onResult }) {
     formData.append("file", fileToUpload);
 
     try {
-      const response = await axios.post(
-        "https://qr-backend-production-c511.up.railway.app/decode_qr",
-        formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
+      // ✅ axios 대신 api 사용 (baseURL 자동 적용)
+      const response = await api.post("/decode_qr", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       console.log("백엔드 응답:", response.data);
+
       if (onResult && typeof onResult === "function") {
         onResult(response.data);
       }
       setFile(null);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("❌ 업로드 중 오류 발생:", error);
       alert("서버 연결 오류가 발생했습니다.");
     } finally {
       setIsLoading(false);
