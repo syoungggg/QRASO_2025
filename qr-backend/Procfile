@@ -1,1 +1,1 @@
-web: bash -c "apt-get update && apt-get install -y libzbar0 && gunicorn app:app --bind 0.0.0.0:$PORT"
+web: bash -c "apt-get update && apt-get install -y libzbar0 && cd qr-backend && gunicorn app:app --bind 0.0.0.0:$PORT"
