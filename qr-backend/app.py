@@ -3,14 +3,18 @@ from flask_cors import CORS
 from qr_decoder import decode_qr
 from analyze_url import analyze_url
 import os
-import sqlite3
 import json
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
-import sys, traceback
+import mysql.connector
+from urllib.parse import urlparse
+import traceback
 
 print("🔥 Flask app.py import 시작됨", flush=True)
 
+# -------------------
+# 환경 변수 로드
+# -------------------
 try:
     load_dotenv()
 except Exception as e:
@@ -30,59 +34,64 @@ except Exception as e:
     traceback.print_exc()
 
 UPLOAD_FOLDER = 'uploads'
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# ✅ 절대경로로 DB 지정 (/data 볼륨)
-DB_PATH = "/data/reports.db"
+# -------------------
+# MySQL 연결 설정
+# -------------------
+db_url = os.getenv("DATABASE_URL")  # Railway 내부 변수
+if not db_url:
+    raise Exception("❌ DATABASE_URL 환경 변수가 설정되어 있지 않습니다!")
+
+parsed = urlparse(db_url)
+MYSQL_CONFIG = {
+    "host": parsed.hostname,
+    "port": parsed.port or 3306,
+    "user": parsed.username,
+    "password": parsed.password,
+    "database": parsed.path.lstrip('/')
+}
+
+def get_db_connection():
+    return mysql.connector.connect(**MYSQL_CONFIG)
 
 # -------------------
-# DB 초기화 (컬럼 자동 추가)
+# DB 초기화 (테이블 자동 생성)
 # -------------------
 def init_db():
-    print("🔧 DB 초기화 시작", flush=True)
+    print("🔧 MySQL DB 초기화 시작", flush=True)
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
 
-    # ✅ /data 폴더 강제 생성 및 권한 부여
-    os.makedirs("/data", exist_ok=True)
-    os.chmod("/data", 0o777)
+        tables = ['reports', 'suspected', 'warning']
+        for table in tables:
+            c.execute(f'''
+                CREATE TABLE IF NOT EXISTS {table} (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    original_url VARCHAR(2048) NOT NULL UNIQUE,
+                    final_url VARCHAR(2048),
+                    domain VARCHAR(512),
+                    ssl_valid BOOLEAN,
+                    whois_creation_date VARCHAR(128),
+                    virustotal_score VARCHAR(128),
+                    phishtank_result BOOLEAN,
+                    label VARCHAR(16),
+                    count INT DEFAULT 1,
+                    analysis_json TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    reported_count INT DEFAULT 0
+                )
+            ''')
+        conn.commit()
+        conn.close()
+        print("✅ MySQL 테이블 생성 완료", flush=True)
+    except Exception as e:
+        print("❌ DB 초기화 중 오류:", e, flush=True)
+        traceback.print_exc()
 
-    # ✅ 상태 로그 출력
-    print("📂 실제 DB 경로:", DB_PATH, flush=True)
-    print("📁 /data 존재 여부:", os.path.exists("/data"), flush=True)
-    print("📂 /data 쓰기 가능?:", os.access("/data", os.W_OK), flush=True)
-
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    tables = ['reports', 'suspected', 'warning']
-    for table in tables:
-        c.execute(f'''
-            CREATE TABLE IF NOT EXISTS {table} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                original_url TEXT NOT NULL UNIQUE,
-                final_url TEXT,
-                domain TEXT,
-                ssl_valid BOOLEAN,
-                whois_creation_date TEXT,
-                virustotal_score TEXT,
-                phishtank_result BOOLEAN,
-                label TEXT,
-                count INTEGER DEFAULT 1,
-                analysis_json TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                reported_count INTEGER DEFAULT 0
-            )
-        ''')
-    conn.commit()
-    conn.close()
-    print("✅ DB 초기화 완료", flush=True)
-
-try:
-    init_db()
-except Exception as e:
-    print("❌ DB 초기화 중 오류:", e, flush=True)
-    traceback.print_exc()
+init_db()
 
 # -------------------
 # DB 저장 함수
@@ -91,38 +100,37 @@ def save_report(analysis_result):
     try:
         url = analysis_result["original_url"]
         label = analysis_result.get("label", "의심")
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
 
-        # reports 테이블 업데이트
-        c.execute("SELECT id, count FROM reports WHERE original_url=?", (url,))
+        conn = get_db_connection()
+        c = conn.cursor(dictionary=True)
+
+        c.execute("SELECT id, count FROM reports WHERE original_url=%s", (url,))
         row = c.fetchone()
 
         if row:
-            report_id, count = row
-            new_count = count + 1
-            c.execute(
-                "UPDATE reports SET count=?, final_url=?, domain=?, ssl_valid=?, whois_creation_date=?, virustotal_score=?, phishtank_result=?, label=?, analysis_json=? WHERE id=?",
-                (
-                    new_count,
-                    analysis_result.get("final_url"),
-                    analysis_result.get("domain"),
-                    analysis_result.get("ssl_valid"),
-                    analysis_result.get("whois_creation_date"),
-                    analysis_result.get("virustotal_score"),
-                    analysis_result.get("phishtank_result"),
-                    label,
-                    json.dumps(analysis_result, ensure_ascii=False),
-                    report_id
-                )
-            )
+            new_count = row["count"] + 1
+            c.execute('''
+                UPDATE reports SET count=%s, final_url=%s, domain=%s, ssl_valid=%s,
+                whois_creation_date=%s, virustotal_score=%s, phishtank_result=%s,
+                label=%s, analysis_json=%s WHERE id=%s
+            ''', (
+                new_count,
+                analysis_result.get("final_url"),
+                analysis_result.get("domain"),
+                analysis_result.get("ssl_valid"),
+                analysis_result.get("whois_creation_date"),
+                analysis_result.get("virustotal_score"),
+                analysis_result.get("phishtank_result"),
+                label,
+                json.dumps(analysis_result, ensure_ascii=False),
+                row["id"]
+            ))
         else:
-            new_count = 1
             c.execute('''
                 INSERT INTO reports (
                     original_url, final_url, domain, ssl_valid, whois_creation_date,
-                    virustotal_score, phishtank_result, label, count, analysis_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    virustotal_score, phishtank_result, label, analysis_json
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 url,
                 analysis_result.get("final_url"),
@@ -132,19 +140,18 @@ def save_report(analysis_result):
                 analysis_result.get("virustotal_score"),
                 analysis_result.get("phishtank_result"),
                 label,
-                new_count,
                 json.dumps(analysis_result, ensure_ascii=False)
             ))
 
-        # ✅ label에 따라 suspected / warning 테이블 분기 저장
+        # suspected / warning 분기 저장
         if label == "의심":
             print("🟡 [DB] suspected 테이블에 저장", flush=True)
             c.execute('''
-                INSERT OR IGNORE INTO suspected (
+                INSERT IGNORE INTO suspected (
                     original_url, final_url, domain, ssl_valid,
                     whois_creation_date, virustotal_score,
                     phishtank_result, label, analysis_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 url,
                 analysis_result.get("final_url"),
@@ -160,11 +167,11 @@ def save_report(analysis_result):
         elif label == "위험":
             print("🔴 [DB] warning 테이블에 바로 저장", flush=True)
             c.execute('''
-                INSERT OR IGNORE INTO warning (
+                INSERT IGNORE INTO warning (
                     original_url, final_url, domain, ssl_valid,
                     whois_creation_date, virustotal_score,
                     phishtank_result, label, analysis_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 url,
                 analysis_result.get("final_url"),
@@ -179,12 +186,13 @@ def save_report(analysis_result):
 
         conn.commit()
         conn.close()
+
     except Exception as e:
         print("❌ save_report() 오류:", e, flush=True)
         traceback.print_exc()
 
 # -------------------
-# 신고 API (3회 이상 신고 시 suspected → warning)
+# 신고 API (3회 이상 → warning 이동)
 # -------------------
 @app.route('/report_qr', methods=['POST'])
 def report_qr():
@@ -194,38 +202,32 @@ def report_qr():
         if not url:
             return jsonify({"error": "URL 필요"}), 400
 
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT id, reported_count FROM suspected WHERE original_url=?", (url,))
+        conn = get_db_connection()
+        c = conn.cursor(dictionary=True)
+        c.execute("SELECT id, reported_count FROM suspected WHERE original_url=%s", (url,))
         row = c.fetchone()
+
         if not row:
             conn.close()
             return jsonify({"error": "이미 신고 처리된 QR 입니다."}), 400
 
-        suspected_id, reported_count = row
-        reported_count += 1
+        reported_count = row["reported_count"] + 1
 
         if reported_count >= 3:
-            print("🚨 신고 누적 3회 이상 → warning으로 이동", flush=True)
-            c.execute("INSERT OR REPLACE INTO warning SELECT * FROM suspected WHERE id=?", (suspected_id,))
-            c.execute("DELETE FROM suspected WHERE id=?", (suspected_id,))
+            print("🚨 신고 누적 3회 이상 → warning 이동", flush=True)
+            c.execute("INSERT IGNORE INTO warning SELECT * FROM suspected WHERE id=%s", (row["id"],))
+            c.execute("DELETE FROM suspected WHERE id=%s", (row["id"],))
         else:
-            c.execute("UPDATE suspected SET reported_count=? WHERE id=?", (reported_count, suspected_id))
+            c.execute("UPDATE suspected SET reported_count=%s WHERE id=%s", (reported_count, row["id"]))
 
         conn.commit()
         conn.close()
         return jsonify({"status": "신고 완료", "current_count": reported_count}), 200
+
     except Exception as e:
         print("❌ report_qr() 오류:", e, flush=True)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-# -------------------
-# Health 체크
-# -------------------
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({"status": "ok"}), 200
 
 # -------------------
 # QR 디코드 + URL 분석
@@ -282,24 +284,12 @@ def decode_qr_route():
 @app.route('/get_warning', methods=['GET'])
 def get_warning():
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
+        conn = get_db_connection()
+        c = conn.cursor(dictionary=True)
         c.execute("SELECT original_url, final_url, domain, ssl_valid, whois_creation_date, virustotal_score, phishtank_result, label FROM warning")
         rows = c.fetchall()
         conn.close()
-        
-        warnings = []
-        for row in rows:
-            warnings.append({
-                "original_url": row[0],
-                "final_url": row[1],
-                "domain": row[2],
-                "ssl_valid": row[3],
-                "whois_creation_date": row[4],
-                "virustotal_score": row[5],
-                "label": row[7],
-            })
-        return jsonify(warnings), 200
+        return jsonify(rows), 200
     except Exception as e:
         print("❌ get_warning() 오류:", e, flush=True)
         traceback.print_exc()
@@ -309,9 +299,9 @@ def get_warning():
 # 서버 실행
 # -------------------
 if __name__ == '__main__':
-    print("🚀 Flask starting ...", flush=True)
+    print("🚀 Flask starting (MySQL) ...", flush=True)
     try:
-        port = int(os.environ.get("PORT", 8080))  # ✅ Railway PORT 환경변수
+        port = int(os.environ.get("PORT", 8080))
         app.run(host="0.0.0.0", port=port)
     except Exception as e:
         print("❌ Flask crashed:", e, flush=True)
